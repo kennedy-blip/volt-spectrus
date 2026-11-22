@@ -1,0 +1,248 @@
+# =============================================================================
+#  VOLT-SPECTRA — grid_telemetry.graphql
+#  Offline-first GraphQL schema for household energy audits.
+#
+#  Executed locally by src/app/services/graphql-engine.service.ts against an
+#  IndexedDB-backed resolver root; the same document is replayed against the
+#  cloud endpoint when connectivity returns (Offline -> Online Sync Queue).
+# =============================================================================
+
+scalar DateTime
+scalar JSON
+
+# ------------------------------------------------------------------ enums
+
+enum Role {
+  HOMEOWNER
+  MASTER_ELECTRICIAN
+  GRID_SYSTEMS_DIRECTOR
+}
+
+enum Severity {
+  CLEAN
+  VAMPIRE
+  FIRE
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+enum Verdict {
+  PURE_SINE
+  ACCEPTABLE
+  DIRTY_POWER
+  DANGER
+}
+
+# ------------------------------------------------------------------ types
+
+"""A single contactless grid / inverter / generator power-quality audit."""
+type GridAudit {
+  id: ID!
+  frequencyHz: Float!
+  thdPercent: Float!
+  crestFactor: Float!
+  purityScore: Float!
+  snrDb: Float!
+  nominalHz: Float!
+  verdict: Verdict!
+  verdictText: String!
+  """Harmonic amplitudes for orders 1..9 (index 0 = fundamental)."""
+  harmonics: [Float!]!
+  """Harmonic magnitudes relative to the fundamental, percent."""
+  harmonicPercent: [Float!]!
+  source: String!
+  createdAt: DateTime!
+  synced: SyncStatus!
+}
+
+"""A phantom-load culprit logged by the Vampire EMF Hunter."""
+type VampireAppliance {
+  id: ID!
+  name: String!
+  location: String!
+  standbyWatts: Float!
+  annualKwh: Float!
+  annualCostUsd: Float!
+  emfUt: Float!
+  humHz: Float!
+  severity: Severity!
+  addedAt: DateTime!
+  synced: SyncStatus!
+}
+
+"""An optical smart-meter pulse reading -> whole-home kW / $/hr."""
+type SmartMeterRead {
+  id: ID!
+  pulseConstant: Int!
+  pulseConstantUnit: String!
+  intervalSeconds: Float!
+  powerW: Float!
+  powerKw: Float!
+  costPerHourUsd: Float!
+  projectedMonthlyUsd: Float!
+  mode: String!
+  createdAt: DateTime!
+  synced: SyncStatus!
+}
+
+"""One hour of a Time-of-Use tariff curve."""
+type TariffSlot {
+  hour: Int!
+  rate: Float!
+  tier: String!
+}
+
+type TariffSchedule {
+  id: ID!
+  name: String!
+  currency: String!
+  blendedRate: Float!
+  curve: [TariffSlot!]!
+}
+
+"""IEEE 519 harmonic compliance verdict for an audit."""
+type HarmonicCompliance {
+  bus: String!
+  thdPercent: Float!
+  voltageThdLimit: Float!
+  voltageCompliant: Boolean!
+  worstHarmonic: Int!
+  individualLimit: Float!
+  individualCompliant: Boolean!
+  currentTddLimit: Float!
+  currentCompliant: Boolean!
+  compliant: Boolean!
+}
+
+"""Offline -> online replication queue entry."""
+type SyncQueueEntry {
+  id: ID!
+  operation: String!
+  typename: String!
+  payload: JSON!
+  status: SyncStatus!
+  attempts: Int!
+  createdAt: DateTime!
+}
+
+"""Cloud replication link diagnostics (Supabase, offline-first mirror)."""
+type CloudLink {
+  enabled: Boolean!
+  url: String
+  lastSyncAt: DateTime
+  lastError: String
+  pending: Int!
+  remoteCount: Int
+}
+
+type PanelCheck {
+  panelAmps: Int!
+  voltage: Float!
+  capacityKw: Float!
+  concurrentKw: Float!
+  headroomKw: Float!
+  loadPercent: Float!
+  trips: Boolean!
+}
+
+# ------------------------------------------------------------------ queries
+
+type Query {
+  """All grid / inverter power-quality audits, newest first."""
+  gridAudits: [GridAudit!]!
+  gridAudit(id: ID!): GridAudit
+
+  """All logged vampire appliances."""
+  vampireAppliances: [VampireAppliance!]!
+  vampireAppliance(id: ID!): VampireAppliance
+
+  """All optical smart-meter readings."""
+  smartMeterReads: [SmartMeterRead!]!
+  smartMeterRead(id: ID!): SmartMeterRead
+
+  """Aggregate annual savings from unplugging logged vampires."""
+  vampireSavings: JSON!
+
+  """Time-of-Use tariff curve."""
+  tariffCurve(scheduleId: ID! = "ca_sou_tou"): TariffSchedule!
+
+  """IEEE 519 compliance evaluation for a THD + harmonic vector."""
+  ieee519(
+    thdPercent: Float!
+    harmonics: [Float!]!
+    bus: String! = "<69kV"
+    iscOverIl: Float! = 50
+  ): HarmonicCompliance!
+
+  """100 A / 200 A main-panel headroom check."""
+  panelCheck(panelAmps: Int!, voltage: Float!, concurrentKw: Float!): PanelCheck!
+
+  """Offline -> online sync queue."""
+  syncQueue: [SyncQueueEntry!]!
+
+  """Cloud replication link diagnostics (Supabase)."""
+  cloudLink: CloudLink!
+
+  """Currently active privilege tier."""
+  role: Role!
+}
+
+# --------------------------------------------------------------- mutations
+
+input VampireApplianceInput {
+  name: String!
+  location: String!
+  standbyWatts: Float!
+  emfUt: Float = 0
+  humHz: Float = 0
+  severity: Severity = VAMPIRE
+}
+
+input GridAuditInput {
+  frequencyHz: Float!
+  thdPercent: Float!
+  crestFactor: Float!
+  purityScore: Float!
+  snrDb: Float!
+  nominalHz: Float!
+  verdict: Verdict!
+  verdictText: String!
+  harmonics: [Float!]!
+  harmonicPercent: [Float!]!
+  source: String!
+}
+
+input SmartMeterReadInput {
+  pulseConstant: Int!
+  pulseConstantUnit: String! = "imp/kWh"
+  intervalSeconds: Float!
+  mode: String! = "optical"
+}
+
+type Mutation {
+  """Log a vampire appliance into the kill-list (persisted to IndexedDB)."""
+  addVampireAppliance(input: VampireApplianceInput!): VampireAppliance!
+
+  removeVampireAppliance(id: ID!): Boolean!
+
+  """Record a grid / inverter audit."""
+  recordGridAudit(input: GridAuditInput!): GridAudit!
+
+  """Record an optical smart-meter reading."""
+  recordSmartMeterRead(input: SmartMeterReadInput!): SmartMeterRead!
+
+  """Manually enqueue a record for cloud sync."""
+  enqueueSync(typename: String!, payload: JSON!): SyncQueueEntry!
+
+  """Flush the offline sync queue (no-op / partial when offline)."""
+  flushSync: [SyncQueueEntry!]!
+
+  clearSyncQueue: Boolean!
+
+  """Switch the active RBAC tier (client-side only)."""
+  setRole(role: Role!): Role!
+}

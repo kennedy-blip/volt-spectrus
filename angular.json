@@ -1,0 +1,92 @@
+{
+  "$schema": "./node_modules/@angular/build/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "volt-spectra": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "vs",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": "dist",
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "polyfills": ["zone.js"],
+            "tsConfig": "tsconfig.json",
+            "assets": [
+              "src/favicon.svg",
+              "src/manifest.webmanifest",
+              {
+                "glob": "**/*",
+                "input": "public",
+                "output": "/"
+              }
+            ],
+            "styles": ["src/styles.css"],
+            "scripts": [],
+            "allowedCommonJsDependencies": ["graphql", "qrcode"]
+          },
+          "configurations": {
+            "production": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.prod.ts"
+                }
+              ],
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1500kb",
+                  "maximumError": "3000kb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "20kb",
+                  "maximumError": "60kb"
+                }
+              ],
+              "optimization": {
+                "scripts": true,
+                "styles": true,
+                "fonts": false
+              },
+              "sourceMap": false,
+              "namedChunks": false,
+              "extractLicenses": false,
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true,
+              "namedChunks": true,
+              "outputHashing": "none"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "buildTarget": "volt-spectra:build",
+            "host": "0.0.0.0",
+            "allowedHosts": true
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "volt-spectra:build:production"
+            },
+            "development": {
+              "buildTarget": "volt-spectra:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}
