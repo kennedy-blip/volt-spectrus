@@ -1,0 +1,31 @@
+# Supabase project config (schema-managed by the connector).
+# `supabase db push` / `create_migration` applies the SQL in ./migrations.
+
+[project]
+id = "volt-spectra"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+# eu-west-2 matches the existing Supabase project that will host this app.
+region = "eu-west-2"
+
+[storage]
+enabled = true
+
+[auth]
+enable_signup = false
+
+[edge_runtime]
+policy = "per_worker"
+inspector_port = 8083
+
+[analytics]
+enabled = false
+port = 54327
+
+[experimental]
+orioledb_version = ""

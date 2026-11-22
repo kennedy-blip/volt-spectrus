@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-theme="obsidian" data-form-factor="desktop">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="theme-color" content="#05070e" />
+    <meta
+      name="description"
+      content="VOLT-SPECTRA — contactless AC grid frequency & THD analyzer, EMF vampire-load hunter, optical smart-meter tachometer and time-of-use bill auditor."
+    />
+    <title>VOLT-SPECTRA · Grid DSP &amp; Vampire Load Analyzer</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <!--
+      Runtime cloud config. Vercel injects the real values at deploy time by
+      replacing the empty strings below (or set them from the Supabase
+      connector). Leave empty to run in offline-first mode.
+    -->
+    <script>
+      window.__VOLT_CONFIG__ = {
+        supabaseUrl: '',
+        supabaseAnonKey: '',
+      };
+    </script>
+  </head>
+  <body>
+    <vs-root></vs-root>
+  </body>
+</html>

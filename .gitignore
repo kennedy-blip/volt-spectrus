@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+
+# angular build output
+dist/
+.angular/
+src/generated/embedded-sources.ts
+
+# native / capacitor
+android/
+ios/
+.capa/
+
+# test / tooling caches
+.cache/
+coverage/
+*.log
+
+# os
+.DS_Store
+Thumbs.db

@@ -1,0 +1,133 @@
+name: Build & Bundle APK
+
+# =============================================================================
+#  VOLT-SPECTRA — one pipeline, two artifacts
+#    1. Angular 19 + @angular/build web bundle  ->  Vercel (dist/browser)
+#    2. Capacitor Android shell + Gradle         ->  public/releases/*.apk
+# =============================================================================
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '22'
+  JAVA_VERSION: '17'
+  APK_NAME: voltspectra-release.apk
+
+jobs:
+  # ------------------------------------------------- 1. web bundle + DSP check
+  web:
+    name: Web bundle (Vercel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify C99 kernel + TS bridge parity
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc
+          npm run c99:test
+          node scripts/test-bridge-parity.mjs
+
+      - name: Build Angular 19 application
+        run: npm run build
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist/browser
+          retention-days: 14
+
+  # ------------------------------------------------------- 2. Android APK
+  apk:
+    name: Android APK (Capacitor + Gradle)
+    runs-on: ubuntu-latest
+    needs: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Capacitor toolchain
+        run: |
+          npm ci
+          npm install @capacitor/cli@7 @capacitor/android@7 --save-dev
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        run: npx cap add android || true
+        env:
+          CAPACITOR_ANDROID_STUDIO_PATH: /usr/local/lib/android/sdk
+
+      - name: Copy web bundle into Android assets
+        run: npx cap sync android
+
+      - name: Assemble release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Bundle APK into public/releases (zero-404 download)
+        run: |
+          mkdir -p public/releases
+          cp android/app/build/outputs/apk/release/app-release.apk \
+             public/releases/$APK_NAME
+          sha256sum public/releases/$APK_NAME | tee public/releases/SHA256SUMS
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APK_NAME }}
+          path: public/releases/${{ env.APK_NAME }}
+
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            public/releases/${{ env.APK_NAME }}
+            public/releases/SHA256SUMS
+
+  # ------------------------------------------------------- 3. Vercel deploy
+  deploy:
+    name: Deploy to Vercel
+    runs-on: ubuntu-latest
+    needs: web
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Pull Vercel environment
+        run: npx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy prebuilt
+        run: npx vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
